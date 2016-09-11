@@ -43,7 +43,7 @@ SynthDef(\noop, {}).add;
 // Google "Hammond drawbar settings" and add your own in the big SelectX block
 // "perc" "percf" and "decay" are an attempt at the percussion, no idea if it sounds at all reasonable
 // vintage Hammonds had percf as 2 or 3 (switchable), two perc levels (maybe roughly 0.7 and 1.2?),
-// and two decay options (roughtly 0 and maybe 1ish?)
+// and two decay options (roughly 0 and maybe 1ish?)
 // "vibrato", "vrate", "perc", "percf" are all new params you'll need to define in Tidal if you want to change them
 SynthDef(\superhammond, {|out, speed=1, sustain=1, decay=0, pan, freq, vibrato=0.5, vrate=7,
 	voice=0, perc=0, percf=2 |
@@ -70,7 +70,7 @@ SynthDef(\superhammond, {|out, speed=1, sustain=1, decay=0, pan, freq, vibrato=0
 	amps = 2**(amps-8);
 	click = WhiteNoise.ar(1) * XLine.ar(1,1e-6, 0.1);
 	sound = 0.5 * Mix.ar( SinOsc.ar(freqs*(2*click+1), (2pi ! 9).rand, amps/amps.sum) );
-	sound = perc * 0.5 * SinOsc.ar(freq*percf, 2pi.rand) * XLine.ar(1,1e-6,5*decay+1) + sound;
+	sound = perc * 0.5 * SinOsc.ar(freq*percf, 2pi.rand) * XLine.ar(1,1e-6,2*decay+1) + sound;
 	sound = sound + BAllPass.ar(sound, 1000*LFTri.kr(vrate,0,vibrato/2,1));
 	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
 }).add;
