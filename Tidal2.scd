@@ -1,17 +1,3 @@
-// IDEAS
-// analog XOR might be something like: shift both ranges to (0,1), add, fold above 0.5
-//   equivalent to add, fold above 0, +1
-//
-// Leslie as global effect, use DelayC for doppler shift, 800 Hz crossover, tremolo, some stereo width
-// Leslie rotation is 40/47.06 or 340/400 rpm, with significant ramp time
-//
-// STUFF TO DO
-// x figure out the best way to get the stereo behavior I want, it's probably not mainstream, so not a PR?
-// x get rid of the message spam, how did that even get in there?
-// o use startup function instead of pile of garbage below
-// x fix accelerate
-// o figure out best way to have something like "sustain" for synths that doesn't scale with other parameters
-
 SuperDirt.start(path:"/Users/bgold/tidal/samples/*");
 
 (
@@ -348,20 +334,6 @@ SynthDef(\supersaw3, {|out, sustain=1, pan, speed=1, accelerate, freq, decay=0, 
 	OffsetOut.ar(out, DirtPan.ar(sound/2, ~dirt.numChannels, pan, env));
 }).add;
 
-
-// SynthDef(\supersaw2, {|out, sustain=1, begin=0, pan, speed=1, accelerate, freq, detune=0.5, velocity=1 |
-// 	var env = EnvGen.ar(Env.perc(0.050, 0.900, velocity/2+0.5, -2), timeScale:sustain, doneAction:2);
-// 	var sound = Mix.arFill(10, {|i|  VarSaw.ar(freq*Line.kr(1,1+accelerate,sustain)*((i-5)*detune/400+1), i/100/velocity, i*speed/10+begin, 0.4)});
-// 	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
-// }).add;
-//
-// SynthDef(\supersaw3, {|out, sustain=1, pan, freq, accelerate, detune=0.5 |
-// 	var env = EnvGen.ar(Env.perc(0.050, 0.900, 1, -2), timeScale:sustain, doneAction:2);
-// 	var basefreq = freq * Line.kr(1,1+accelerate,sustain);
-// 	var sound = Mix.arFill(10, {|i|  SawDPW.ar(basefreq * ((i-5)*detune/400+1), i/1.1, 0.4)});
-// 	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
-// }).add;
-
 SynthDef(\superblip, {|out, sustain=1, pan, freq|
 	var env = EnvGen.ar(Env.perc(0.050, 0.900, 1, -2), timeScale:sustain, doneAction:2);
 	var sound = Pulse.ar(freq, Line.kr(0,1,sustain), 0.5);
@@ -369,7 +341,8 @@ SynthDef(\superblip, {|out, sustain=1, pan, freq|
 }).add;
 
 ////////////////////////////////////////////////////////////////////////////////////
-
+// the next few synthdefs are old, and probably obsolete at this point
+///////////
 SynthDef(\basicmandolin, {|out, freq|
 	var sound = Decay.ar(Impulse.ar(0), 0.1) * WhiteNoise.ar;
 	sound = CombL.ar(sound, 0.05, freq.reciprocal);
@@ -475,6 +448,7 @@ SynthDef("dirt_comp" ++ ~dirt.numChannels, {|out, comp=0, compa=0, compr=0|
 	ReplaceOut.ar(out, mod);
 }).add;
 
+// fm with a sine wave
 ~dirt.addModule('fm', { |dirtEvent|
 	dirtEvent.sendSynth('dirt_fm' ++ ~dirt.numChannels,
 		[fm: ~fm,	fmf: ~fmf,  out: ~out	]
@@ -505,7 +479,7 @@ SynthDef("dirt_wrap" ++ numChannels, { |out, wrap, wrapoff=0 |
 	ReplaceOut.ar(out, signal.wrap(wrapoff-wrap, wrap+wrapoff) / wrap);
 }).add;
 
-// not actually a saw anymore
+// not actually a saw anymore, just a "chopper"
 ~dirt.addModule('envsaw', { |dirtEvent|
 	dirtEvent.sendSynth('dirt_envsaw' ++ ~dirt.numChannels,
 		[envsaw: ~envsaw, envsawf: ~envsawf, out: ~out])}, { ~envsaw.notNil;});
@@ -528,6 +502,7 @@ SynthDef("dirt_boom" ++ ~dirt.numChannels, {|out, boom=0|
 	ReplaceOut.ar(out, SelectX.ar(boom, [signal, wet]));
 }).add;
 
+// an alternative to boom, might be less CPU-hungry
 ~dirt.addModule('gboom', { |dirtEvent| dirtEvent.sendSynth("dirt_gboom" ++ ~dirt.numChannels,
 			[gboom: ~gboom, out: ~out])}, { ~gboom.notNil});
 SynthDef("dirt_gboom" ++ ~dirt.numChannels, {|out, gboom=0|
@@ -537,54 +512,6 @@ SynthDef("dirt_gboom" ++ ~dirt.numChannels, {|out, gboom=0|
 	wet = (abs(signal) > 0.2) * signal;
 	wet = FreeVerb.ar(signal, 1, 0.1, 1);
 	ReplaceOut.ar(out, SelectX.ar(gboom, [signal, wet]));
-}).add;
-
-
-////////
-// old stuff below here
-////////
-
-SynthDef(\dropsy, {|out, speed=1, begin=0, end=1, pan, accelerate, amp=1, index, cps, offset |
-	var env, sound, dur, freq;
-	dur = (end-begin)/speed;
-	freq = index.midicps;
-	env = EnvGen.ar(Env.linen(0.1, 0.8, 0.1, 0.2*amp, -2), timeScale:dur, doneAction:2);
-	sound = Pulse.ar(XLine.kr(freq, 0.5*freq, dur), Line.kr(0.0, 0.5, dur));
-	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env))
-}).add;
-
-SynthDef(\demo1, { |out, speed=1, start=0, end=1, pan, accelerate, amp=1, index, offset |
-	var env, sound, dur, freq;
-	dur = 0.3;
-	freq = index.midicps * speed;
-	env = EnvGen.ar(Env.perc(0.02/speed, 0.5, amp*0.3, -4), timeScale:dur, doneAction:2);
-	sound = FBSineL.ar(freq*8, end);
-	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env))
-}).add;
-
-SynthDef(\synth, {|out, speed=1, start=0, end=1, pan, accelerate, amp=1, index, offset|
-	var env, sound, dur, freq;
-	dur = 0.5 * (end-start)/speed;
-	freq = index.midicps * speed;
-	env = EnvGen.ar(Env.perc(0.01, 5/speed, amp*0.2, -4), timeScale:dur, doneAction:2);
-	sound = FBSineC.ar(freq*16, im:Line.kr(amp*amp,amp*amp+accelerate), fb:0.1+start,
-	a:1.0, c:0.5);
-	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env))
-}).add;
-
-SynthDef(\pmsin2, { |out, speed = 1, start=0, end=1, pan, accelerate, amp = 1, offset|
-	var env, sound, dur, rate, phase, freq, modfreq;
-	dur = (end - start) / speed * 0.5;
-	freq = MouseX.kr(70, 80).round.midicps * speed;
-	modfreq = MouseY.kr(200, 2000, 1);
-	amp = AmpCompA.kr(freq) * amp;
-	env = EnvGen.ar(Env.perc(0.002, dur, amp * 0.2, -1), timeScale:dur, doneAction:2);
-	phase = Line.ar(start, end, dur);
-	rate = speed + Sweep.kr(1, accelerate);
-	sound = SinOsc.ar(freq, SinOsc.ar(modfreq * (1..5), 0, 1 - phase * 10 * env / (1..5), 0.5pi)).sum;
-	OffsetOut.ar(out,
-		DirtPan.ar(sound, ~dirt.numChannels, pan, env)
-	)
 }).add;
 
 );
