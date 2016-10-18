@@ -13,15 +13,30 @@ server.waitForBoot {
 	server.sync; // wait for samples to be read
 	~dirt.start(57120, 0 ! 4);   // start listening on port 57120, create two busses each sending audio to channel 0
 };
-s.latency = 0.3; // increase this if you get "late" messages
+server.latency = 0.3; // increase this if you get "late" messages
 // don't know why this doesn't work
 //DirtPan.defaultMixingFunction = {|channels, pan=0| if (channels.numChannels == 2) {Balance2.ar(channels[0], channels[1],pan)} {channels.sum} ;}
 )
+
+~dirt.orderModules([\shape, \lpf]);
 
 // custom stuff
 (
 var numChannels = ~dirt.numChannels;
 SynthDef(\noop, {}).add;
+
+// tuning fork
+// from my own experimentation and from "On the acoustics of tuning forks", Rossing Russell and Brown
+SynthDef(\superfork, {|out, speed=1, sustain=1, decay=0, pan, freq, voice=0 |
+	var sound, env;
+	env = EnvGen.ar(Env.linen(0.001, 0.998, 0.001), timeScale:sustain, doneAction:2);
+	sound = SinOsc.ar(freq) * XLine.ar(0.3, 1e-4, sustain*4);
+	sound = SinOsc.ar(6.1*freq) * XLine.ar(1, 1e-7, sustain*4) + sound;
+	sound = SinOsc.ar(16.7*freq) * XLine.ar(1.3, 1e-6, sustain/2) + sound;
+	sound = SinOsc.ar(20.1*freq) * XLine.ar(2, 1e-7, sustain/3) + sound;
+	sound = sound * 0.2;
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
 
 // hammond B3 sim
 // freq adjustments courtesy Tom Wiltshire (electricdruid.net)
