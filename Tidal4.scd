@@ -1,7 +1,8 @@
 // four orbit startup
 ~dirt = SuperDirt.start(path:"/Users/bgold/tidal/samples/*", numOrbits:4);
 
-/// optional sidechaining from efairbanks, orbit 0 comps orbit 1
+// evaulate this block for optional sidechaining from efairbanks
+// orbit 0 comps orbit 1
 (
 ~modBus.free;
 ~carBus.free;
@@ -23,6 +24,33 @@ Ndef(\x, {
 });
 )
 
+// Below is one massive block that implements many synths and effects
+// from a variety of sources, apologies to anyone I haven't credited
+// not well documented, but you can look at the synth code for their params
+// Synths:
+//  superfff, superpsaw, supersync, superdrop, superdub5, superdub6,
+//  superacid, superwobble, superpulse, superzzz, supervoice, superbuf,
+//  supercross, super302, superlagcomp, superphase, superblip
+//
+// Effects (and their params):
+//  Note following LPF - cutoff2, resonance
+//  AM distortion - amdist
+//  Stereo distortion - fmdist, fmdistf
+//  Allpass filtering - allpass
+//  Sparkle - sparkle, sparklef
+//  Krush (from Sonic Pi) - krush, kcutoff
+//  Ring modulation - ring, ringf, ringdf
+//  Octave adding (from Sonic Pi) - octer, octersub, octersubsub
+//  Limiting - wall, walllev
+//  Customizing SuperDirt's default LPF - cutoff, resonance, fattack, fhold, frelease, fenv, flfo, flfof
+//  Distortion - distort
+//  Per-voice compression - comp, compa, compr
+//  FM modulator - fm, fmf
+//  Rectifier - rect, rectoff
+//  Wraparound - wrap, wrapoff
+//  Amplitude chopping - envsaw, envsawf
+//  Per-voice reverb - boom
+//  Per-voice reverb that uses less CPU - gboom
 (
 var server = server ? Server.default;
 var numChannels = ~dirt.numChannels;
@@ -374,7 +402,7 @@ SynthDef("dirt_ring" ++ ~dirt.numChannels, {|out, ring=0, ringf=0, ringdf|
 // Sonic Pi's octaver
 ~dirt.addModule('octer', { |dirtEvent| dirtEvent.sendSynth("dirt_octer" ++ ~dirt.numChannels,
 	[octer: ~octer, octersub: ~octersub, octersubsub: ~octersubsub, out: ~out])},
-    { ~octer.notNil or: {~octersub.notNil } or: {~osctersubsub.notNil}});
+    { ~octer.notNil or: {~octersub.notNil } or: {~octersubsub.notNil}});
 SynthDef("dirt_octer" ++ ~dirt.numChannels, {|out, octer, octersub, octersubsub|
 	var signal, oct1, oct2, oct3, sub;
 	signal = In.ar(out, ~dirt.numChannels);
@@ -505,6 +533,7 @@ SynthDef("dirt_gboom" ++ ~dirt.numChannels, {|out, gboom=0|
 }).add;
 
 );
+
 
 
 // tape stuff to be pasted in
