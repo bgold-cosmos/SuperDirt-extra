@@ -3,4 +3,4 @@ Files adding SynthDefs to [SuperDirt](https://github.com/musikinformatik/SuperDi
 
 This is just my personal set of experiments, there's a lot of junk in here!
 
-last updated 2019-07-05
+last updated 2020-03-22
