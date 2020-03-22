@@ -20,74 +20,39 @@ server.options.numBuffers = 1024 * 16; // increase this if you need to load more
 server.options.memSize = 8192 * 64; // increase this if you get "alloc failed" messages
 server.options.maxNodes = 1024 * 32; // increase this if you are getting drop outs and the message "too many nodes"
 server.options.numInputBusChannels= 0; // to avoid issues of sample rate mismatch
+server.options.numWireBufs = 1280;
 // boot the server and start SuperDirt
 server.waitForBoot {
 	~dirt = SuperDirt.start(path:"/Users/bgold/tidal/samples/*", numOrbits:4);
-	// MIDIClient.init;  // uncomment this and the next line for MIDI output
+	// MIDIClient.init;  // uncomment these lines for MIDI output
 	// ~midiOut = MIDIOut.newByName("IAC Driver", "Bus 1");
 }
 )
 
-~dirt.soundLibrary.addMIDI(\midi, ~midiOut);
-
-
-
-// MIDI->OSC bridge (may not be current)
+// sidechain orbit 2 using orbit 3
 (
-var server = server ? Server.default;
-
-server.options.numBuffers = 1024 * 16; // increase this if you need to load more samples
-server.options.memSize = 8192 * 64; // increase this if you get "alloc failed" messages
-server.options.maxNodes = 1024 * 32; // increase this if you are getting drop outs and the message "too many nodes"
-server.options.numInputBusChannels= 0;
-// boot the server and start SuperDirt
-server.waitForBoot {
-	~dirt = SuperDirt.start(path:"/Users/bgold/tidal/samples/*", numOrbits:4);
-	MIDIClient.init;
-	MIDIIn.connectAll;
-	~notes=[];
-	~oscSendAddress = NetAddr("localhost", 6010);
-	// ~midiHandler = MIDIFunc.cc( {|val, num, chan, src|
-	// 	~oscSendAddress.sendMsg('/ctrl', num, val.asInteger);
-	// 	postln(num.asString + " " + val.asString + " " + chan.asString +" " + src.asString);
-	// }, nil, nil, nil);
-	MIDIFunc.cc({|val, num, chan, src| ~oscSendAddress.sendMsg('/ctrl', num, val/127.0);}, nil, nil, nil);
-	MIDIFunc.noteOn({|veloc, num, chan, src| ~notes=~notes.add(num); ~notes=~notes.sort({|a,b| a>b}).reverse;    ~oscSendAddress.sendMsg('/ctrl', "notes", format("%", ~notes-60)); ~notes.postln;});
-	MIDIFunc.noteOff({|veloc, num, chan, src| ~notes=~notes.takeThese({|x| x==num}); ~oscSendAddress.sendMsg('/ctrl', "notes", format("%", ~notes-60)); ~notes.postln;});
-}
+~modBus.free;
+~carBus.free;
+~dirt.orbits[2].outBus = 0;
+~dirt.orbits[3].outBus = 0;
+// --- //
+~modBus = Bus.audio(s, numChannels:2); // assuming stereo, expand if needed
+~carBus = Bus.audio(s, numChannels:2);
+~dirt.orbits[3].outBus = ~modBus; // play into that bus.
+~dirt.orbits[2].outBus = ~carBus;
+Ndef(\x, {
+    var modBus = In.ar(~modBus, 2);
+    var carBus = In.ar(~carBus, 2);
+    var out = modBus+carBus;
+    //carBus = FreeVerb.ar(carBus, 0.9, 0.8, 0.8);
+	out = Compander.ar(carBus, modBus, -30.dbamp, 1, 0.01, 0.01, 0.07)+modBus;
+    //out = Compander.ar(out, out, -15.dbamp, 1, 0.2);
+    Out.ar(0, out);
+})
 )
 
-( // global looper?  pretty glitchy
-var server = server ? Server.default;
-~recBus.free;
-~recBuf.free;
-~dirt.orbits[0].outBus = 0;
-//
-~recBus = Bus.audio(server,2);
-~recBuf = Buffer.alloc(server, server.sampleRate * 10, 2);
-~dirt.orbits[0].outBus = ~recBus;
-Ndef(\r, { |rec = 0|
-	var sig = In.ar(~recBus, 2);
-	RecordBuf.ar(sig, ~recBuf, run:rec > 0, trigger:rec);
-	Out.ar(0, sig);
-});
-SynthDef(\gloop, { |out, begin, end, sustain, speed, accelerate, pan|
-	var sound;
-	var env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
-	var ind = Sweep.ar(1, BufSampleRate.ir(~recBuf));
-	ind = (ind * speed) + (begin * BufSampleRate.ir(~recBuf));
-	sound = BufRd.ar(2,~recBuf, ind);
-	OffsetOut.ar(out,DirtPan.ar(3.0*sound, ~dirt.numChannels, pan, env));
-}).add;
-)
 
-Ndef(\r).set(\rec, 1);
-Ndef(\r).set(\rec, 0);
-
-~dirt.loadSoundFiles("/Users/bgold/Desktop")
-
-~dirt.postSampleInfo
-
+//~dirt.soundLibrary.addMIDI(\midi, ~midiOut);
 ~dirt.orderModules([\lpf, \bpf]);
 ~dirt.orderModules([\wrap, \shape]); // swapped from default
 ~dirt.orderModules([\shape, \wrap]); // back to default
@@ -129,47 +94,87 @@ nil;
 Server.local.options
 ~dirt.modules.collect({|x| x.name})
 
-/// optional sidechaining from efairbanks, orbit 0 comps orbit 1
 (
-~modBus.free;
-~carBus.free;
-~dirt.orbits[0].outBus = 0;
-~dirt.orbits[1].outBus = 0;
-// --- //
-~modBus = Bus.audio(s, numChannels:2); // assuming stereo, expand if needed
-~carBus = Bus.audio(s, numChannels:2);
-~dirt.orbits[0].outBus = ~modBus; // play into that bus.
-~dirt.orbits[1].outBus = ~carBus;
-Ndef(\x, {
-    var modBus = In.ar(~modBus, 2);
-    var carBus = In.ar(~carBus, 2);
-    var out = modBus+carBus;
-    //carBus = FreeVerb.ar(carBus, 0.9, 0.8, 0.8);
-	out = Compander.ar(carBus, modBus, -30.dbamp, 1, 0.01, 0.01, 0.07)+modBus;
-    //out = Compander.ar(out, out, -15.dbamp, 1, 0.2);
-    Out.ar(0, out);
-})
-)
-
-(
-SynthDef(\superpad, {|out, sustain, pan, accelerate, freq, voice|
-	var sound, env, chop, fb, fr, cc;
-	env = EnvGen.ar(Env.linen(0.4, 0.2, 0.4), timeScale:sustain, doneAction:2);
+var numChannels = ~dirt.numChannels;
+SynthDef(\se1, {|out, sustain, pan, accelerate, freq, voice=0|
+	var sound, fenv, env, k, amps;
 	freq = freq * XLine.ar(1, exp(accelerate), sustain);
-	fr = Line.ar(2.05, 1.95, sustain, mul:[1.01, 0.99]);
-	sound = SinOscFB.ar(freq/fr, 4).range(freq-10, freq+10);
-	fb = Line.ar(0.5, 0.8, sustain);
-	sound = Mix.ar(SinOscFB.ar(sound*[0.48, 0.745, 1, 3.2], fb, mul:[0.3, 0.2, 1, 0.2]));
-	chop = Saw.ar(freq + SinOsc.ar(1/sustain).range(-2,2));
-	cc = EnvGen.ar(Env.perc(0.5, 0.5, curve:1), timeScale:sustain, levelScale:-0.2, levelBias:0.2);
-	sound = sound * (chop < cc);
-	sound = BLowPass4.ar(BLowPass4.ar(sound, 8000, 1.5), 7500, 2.5);
-	sound = LeakDC.ar(sound);
-	sound = Splay.ar(sound, 0.5, levelComp:true); // TODO: multichannel
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	fenv = EnvGen.ar(Env.perc(0.49, 0.49, curve:[-2,2]), timeScale:sustain);
+	sound = VarSaw.ar(freq) * Pulse.ar(freq, voice*LFSaw.ar(freq/100).range(0,1)).range(0,1);
+	sound = LPF.ar(sound, Clip.ar(2820*(fenv**0.8), 20, 10e3));
+	sound = tanh(2*sound**[1,2,4,8]);
+	sound = Mix.ar(sound)*0.3;
+	sound = SplayAz.ar(2, sound, 0.5);
 	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
 }).add;
-)
 
+SynthDef(\se2, {|out, sustain, pan, accelerate, freq, voice=0|
+	var osc1, osc2, sound, env, ratio, wid;
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	wid = Line.ar(0.85,0.3, sustain);
+	osc1 = Trig.ar(Impulse.ar(freq),wid/freq);
+	ratio = Line.ar(3.1,5.7,sustain);
+	osc2 = EnvGen.ar(Env([0,0,1,0,0], [0, 0.5,0.5,0], releaseNode:3, loopNode:0), osc1, timeScale:1/freq/ratio);
+	sound = LeakDC.ar(osc2, 0.99);
+	sound = LPF.ar(LPF.ar(sound,18e3), 15e3);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+SynthDef(\se3, {|out, sustain, pan, accelerate, freq, voice=0|
+	var osc1, osc2, sound, env;
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	osc1 = Trig.ar(Impulse.ar(freq) + Impulse.ar(freq, 0.6), 0.5/freq);
+	osc2 = EnvGen.ar(Env([0,0,1,0,0], [0, 0.5,0.5,0], releaseNode:3, loopNode:0), osc1, timeScale:1/freq/2.4);
+	sound = LeakDC.ar(osc2, 0.99);
+	sound = LPF.ar(LPF.ar(sound,18e3), 15e3);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+SynthDef(\se4, {|out, sustain, pan, accelerate, freq, voice=0|
+	var osc1, osc2, sound, env;
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	osc1 = Trig.ar(Impulse.ar(freq*[1,1.01]), 0.5/freq);
+	osc2 = EnvGen.ar(Env([0,0,1,-1,0,0], [0, 0.45,0.1,0.45,0], releaseNode:4, loopNode:0), osc1,
+		timeScale:1/freq/Saw.ar([1,1.01]).range(1.5,3.5));
+	sound = Mix.ar(osc2/2);
+	sound = LeakDC.ar(sound, 0.99);
+	sound = LPF.ar(LPF.ar(sound,18e3), 15e3);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+SynthDef(\se5, {|out, sustain, pan, accelerate, freq, voice=0|
+	var osc1, osc2, sound, env;
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	osc1 = Mix.ar(Trig.ar(Impulse.ar(freq,[0,0.01]), 0.5/freq));
+	osc2 = EnvGen.ar(Env([0,0,1,-1,0,0], [0, 0.45,0.1,0.45,0], releaseNode:4, loopNode:0), osc1,
+		timeScale:1/freq/(2.0*osc1+2.5));
+	sound = Mix.ar(osc2*LeakDC.ar(osc1));
+	sound = atan(sound*3*XLine.ar(1,0.3,sustain));
+	sound = LeakDC.ar(sound, 0.99);
+	sound = LPF.ar(LPF.ar(sound,8e3), 5e3);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+SynthDef(\se6, {|out, sustain, pan, accelerate, freq, voice=0|
+	var osc1, osc2, sound, env;
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	env = EnvGen.ar(Env.linen(0.05, 0.9, 0.05), timeScale:sustain, doneAction:2);
+	osc1 = Saw.ar(freq/2.01);
+	osc2 = SinOsc.ar(freq*(5.0*osc1+1));
+	sound = osc2 + DelayL.ar(osc2, 0.2, Line.ar(2.3,2.1,sustain)/freq);
+	sound = atan(sound*3*XLine.ar(1,0.2, sustain)) * 0.7;
+	sound = LeakDC.ar(sound, 0.99);
+	sound = LPF.ar(LPF.ar(sound,8e3), 5e3);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+
+)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -206,6 +211,55 @@ SynthDef(\out, {|out, sustain=1, pan, begin, end,loop=1|
 	var env = EnvGen.ar(Env.linen(0.05, 0.8, 0.15), timeScale:sustain, doneAction:2);
 	phase = LFSaw.ar(loop/sustain, 1).range(begin,end);
 	sound = BufRd.ar(1, synthbuf, phase);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
+}).add;
+
+SynthDef(\superw, {|out, sustain, pan, accelerate, freq, voice=0|
+	var sound, env, k, amps;
+	k = Array.series(20, 1)*2-1;
+	amps = 3.0e-1 / (k**0.8);
+	env = EnvGen.ar(Env.perc(0.5, 0.5, curve:[-2,2]), timeScale:sustain, doneAction:2);
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	sound = Saw.ar(freq * k + [0.2,-0.2], amps) * Pulse.ar(freq, Saw.ar(freq).range(0.4,0.6)).range(0,1);
+	sound = Mix.ar(sound*(env**0.5));
+	sound = atan(sound*10);
+	sound = LPF.ar(sound, Clip.ar((0.5+voice)*820*(env**1.8), 20, 20e3));
+	sound = SplayAz.ar(2, sound, 0.5);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, 1.0));
+}).add;
+
+
+SynthDef(\superwannabe, {|out, sustain, pan, accelerate, freq, voice=0|
+	var sound, env, fenv, k, km, amps, phases, ramp;
+	k = Array.series(40, 1);
+	km = k ** (1.01);
+	amps = 3.0e-2 / (k**1.2);
+	phases = (k * pi).mod(2pi);
+	ramp = Line.ar(0,0.5,sustain);
+	env = EnvGen.ar(Env.triangle(1), timeScale:sustain, doneAction:2);
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	sound = SinOsc.ar(freq * k, phases*ramp*SinOsc.ar(freq*km)*SinOsc.ar(6).range(0.99,1.01), amps);
+	sound = Mix.ar(sound*env);
+	sound = atan(sound*30);
+	sound = LPF.ar(sound, Clip.ar((0.5+voice)*5520*(env**1.8), 20, 20e3));
+	sound = SplayAz.ar(2, sound, 0.5);
+	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, 1.0));
+}).add;
+
+SynthDef(\superpad, {|out, sustain, pan, accelerate, freq, voice|
+	var sound, env, chop, fb, fr, cc;
+	env = EnvGen.ar(Env.linen(0.4, 0.2, 0.4), timeScale:sustain, doneAction:2);
+	freq = freq * XLine.ar(1, exp(accelerate), sustain);
+	fr = Line.ar(2.05, 1.95, sustain, mul:[1.01, 0.99]);
+	sound = SinOscFB.ar(freq/fr, 4).range(freq-10, freq+10);
+	fb = Line.ar(0.5, 0.8, sustain);
+	sound = Mix.ar(SinOscFB.ar(sound*[0.48, 0.745, 1, 3.2], fb, mul:[0.3, 0.2, 1, 0.2]));
+	chop = Saw.ar(freq + SinOsc.ar(1/sustain).range(-2,2));
+	cc = EnvGen.ar(Env.perc(0.5, 0.5, curve:1), timeScale:sustain, levelScale:-0.2, levelBias:0.2);
+	sound = sound * (chop < cc);
+	sound = BLowPass4.ar(BLowPass4.ar(sound, 8000, 1.5), 7500, 2.5);
+	sound = LeakDC.ar(sound);
+	sound = Splay.ar(sound, 0.5, levelComp:true); // TODO: multichannel
 	OffsetOut.ar(out, DirtPan.ar(sound, ~dirt.numChannels, pan, env));
 }).add;
 
@@ -1284,11 +1338,11 @@ SynthDef("dirt_wrap" ++ numChannels, { |out, wrap, wrapoff=0 |
 // not actually a saw anymore, just a "chopper"
 ~dirt.addModule('envsaw', { |dirtEvent|
 	dirtEvent.sendSynth('dirt_envsaw' ++ ~dirt.numChannels,
-		[envsaw: ~envsaw, envsawf: ~envsawf, out: ~out])}, { ~envsaw.notNil;});
-SynthDef("dirt_envsaw" ++ numChannels, { |out, envsaw, envsawf=10 |
+		[envsaw: ~envsaw, envsawf: ~envsawf, envsawd: ~envsawd, out: ~out])}, { ~envsaw.notNil;});
+SynthDef("dirt_envsaw" ++ numChannels, { |out, envsaw, envsawf=10, envsawd=0 |
 	var signal, mod;
 	signal = In.ar(out, numChannels);
-	mod = Lag.ar(LFPulse.ar(envsawf, iphase:0, width:0.5), 0.050) * envsaw + 1.0 - envsaw;
+	mod = Lag.ar(LFPulse.ar(envsawf, iphase:0, width:envsawd/2+0.5), 0.050) * envsaw + 1.0 - envsaw;
 	// mod = ((Saw.ar(envsawf) * (-1)) + 1.0) * 0.5 * envsaw + 1.0 - envsaw;
 	ReplaceOut.ar(out, signal * mod);
 }).add;
